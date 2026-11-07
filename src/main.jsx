@@ -28,7 +28,6 @@ function App() {
   const [chosen, setChosen] = useState({});
   const [onlyUntagged, setOnlyUntagged] = useState(false);
   const [message, setMessage] = useState("");
-  const [prepared, setPrepared] = useState({});
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const incoming = params.get("addVideo");
@@ -93,15 +92,14 @@ function App() {
     const c = chosen[v.id] ?? db.comments[0];
     if (!c) return notify("Cadastre um comentário primeiro.");
     const tab = window.open(v.url, "_blank", "noopener,noreferrer");
-    try { await navigator.clipboard.writeText(c); setPrepared(p=>({...p,[v.id]:true})); notify("Vídeo aberto e comentário copiado. Cole, revise e publique manualmente no TikTok."); }
+    try { await navigator.clipboard.writeText(c); notify("Vídeo aberto e comentário copiado. Cole, revise e publique manualmente no TikTok."); }
     catch { notify(tab ? "Vídeo aberto, mas não foi possível copiar. Use o botão Copiar comentário." : "Não foi possível abrir o vídeo nem copiar o comentário. Verifique o navegador."); }
   }
   function mark(v) {
-    if (!prepared[v.id] && !window.confirm("Você realmente publicou o comentário manualmente no TikTok?")) return;
     const c = chosen[v.id] ?? db.comments[0];
     if (!c) return notify("Cadastre um comentário primeiro.");
     if (!window.confirm("Confirma que o comentário já foi publicado no TikTok?")) return;
-    setDb(d=>({...d,videos:d.videos.map(x=>x.id===v.id?{...x,done:true,date:today(),usedComment:c}:x)})); setPrepared(p=>({...p,[v.id]:false})); notify("Publicação registrada após sua confirmação.");
+    setDb(d=>({...d,videos:d.videos.map(x=>x.id===v.id?{...x,done:true,date:today(),usedComment:c}:x)})); notify("Publicação registrada após sua confirmação.");
   }
   async function copy(v) {
     const c = chosen[v.id] ?? db.comments[0];
