@@ -14,7 +14,7 @@ function normalizeUrl(raw) {
     u.search = ""; u.hash = ""; return u.href.replace(/\/$/, "");
   } catch { return null; }
 }
-const BOOKMARKLET = `javascript:(()=>{const u=location.href;if(!/^https:\\/\\/(www\\.)?tiktok\\.com\\/@[^/]+\\/video\\/\\d+/.test(u)){alert("Abra um vídeo individual do TikTok primeiro.");return;}window.open("http://localhost:5173/?addVideo="+encodeURIComponent(u),"_blank","noopener");})();`;
+const BOOKMARKLET = `javascript:(()=>{const u=new URL(location.href);if(!["tiktok.com","www.tiktok.com"].includes(u.hostname)||!u.pathname.includes("/video/")){alert("Abra um vídeo individual do TikTok primeiro.");return;}window.open("http://localhost:5173/?addVideo="+encodeURIComponent(u.href),"_blank");})();`;
 function App() {
   const [db, setDb] = useState(read);
   const [page, setPage] = useState("Painel");
