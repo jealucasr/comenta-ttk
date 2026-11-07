@@ -4,7 +4,7 @@ import "./style.css";
 
 const STORAGE = "comenta-ttk-v1";
 const initial = { tags: ["moda", "beleza"], comments: ["Adorei o conteúdo! ✨", "Que vídeo legal! ❤️"], videos: [] };
-const today = () => new Date().toLocaleDateString("en-CA");
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
 function read() { try { const x = JSON.parse(localStorage.getItem(STORAGE)); return x && Array.isArray(x.tags) && Array.isArray(x.comments) && Array.isArray(x.videos) ? x : initial; } catch { return initial; } }
 function normalizeUrl(raw) {
   try {
@@ -28,6 +28,7 @@ function App() {
   const [chosen, setChosen] = useState({});
   const [onlyUntagged, setOnlyUntagged] = useState(false);
   const [message, setMessage] = useState("");
+  const [prepared, setPrepared] = useState({});
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const incoming = params.get("addVideo");
@@ -71,7 +72,7 @@ function App() {
   }
   function addBulk(e) {
     e.preventDefault();
-    const parts = bulkUrls.split(/[\\s,;]+/).map(x => x.trim()).filter(Boolean);
+    const parts = bulkUrls.split(/\s+/).map(x => x.trim()).filter(Boolean);
     const existing = new Set(db.videos.map(v => v.url));
     const incoming = [];
     let invalid = 0, duplicates = 0;
@@ -88,10 +89,19 @@ function App() {
   }
   function updateVideoTag(id, tag) { setDb(d => ({...d,videos:d.videos.map(v => v.id === id ? {...v,tag} : v)})); }
   function remove(id) { setDb(d => ({...d,videos:d.videos.filter(v=>v.id!==id)})); }
-  function mark(v) {
+  async function prepare(v) {
     const c = chosen[v.id] ?? db.comments[0];
     if (!c) return notify("Cadastre um comentário primeiro.");
-    setDb(d=>({...d,videos:d.videos.map(x=>x.id===v.id?{...x,done:true,date:today(),usedComment:c}:x)})); notify("Publicação registrada após sua confirmação.");
+    const tab = window.open(v.url, "_blank", "noopener,noreferrer");
+    try { await navigator.clipboard.writeText(c); setPrepared(p=>({...p,[v.id]:true})); notify("Vídeo aberto e comentário copiado. Cole, revise e publique manualmente no TikTok."); }
+    catch { notify(tab ? "Vídeo aberto, mas não foi possível copiar. Use o botão Copiar comentário." : "Não foi possível abrir o vídeo nem copiar o comentário. Verifique o navegador."); }
+  }
+  function mark(v) {
+    if (!prepared[v.id] && !window.confirm("Você realmente publicou o comentário manualmente no TikTok?")) return;
+    const c = chosen[v.id] ?? db.comments[0];
+    if (!c) return notify("Cadastre um comentário primeiro.");
+    if (!window.confirm("Confirma que o comentário já foi publicado no TikTok?")) return;
+    setDb(d=>({...d,videos:d.videos.map(x=>x.id===v.id?{...x,done:true,date:today(),usedComment:c}:x)})); setPrepared(p=>({...p,[v.id]:false})); notify("Publicação registrada após sua confirmação.");
   }
   async function copy(v) {
     const c = chosen[v.id] ?? db.comments[0];
@@ -99,7 +109,7 @@ function App() {
     try { await navigator.clipboard.writeText(c); notify("Comentário copiado. Publique manualmente no TikTok."); }
     catch { notify("Não foi possível copiar. Selecione o texto manualmente."); }
   }
-  const row = v => <article className="video" key={v.id}><div className="videohead"><span className="tag">{v.tag ? "#"+v.tag : "Sem hashtag"}</span><span className={v.done?"status ok":"status"}>{v.done?"Confirmado":"Pendente"}</span></div><label className="video-tag-picker"><span className="muted">Hashtag:</span><select aria-label="Hashtag deste vídeo" value={v.tag || ""} onChange={e=>updateVideoTag(v.id,e.target.value)}><option value="">Sem hashtag</option>{db.tags.map(t=><option key={t} value={t}>#{t}</option>)}</select></label><a className="url" href={v.url} target="_blank" rel="noopener noreferrer">{v.url}</a>{!v.done ? <><select aria-label="Escolher comentário" value={chosen[v.id] ?? db.comments[0] ?? ""} onChange={e=>setChosen(s=>({...s,[v.id]:e.target.value}))}><option value="" disabled>Selecione um comentário</option>{db.comments.map(c=><option key={c} value={c}>{c}</option>)}</select><div className="actions"><a className="button secondary" href={v.url} target="_blank" rel="noopener noreferrer">↗ Abrir vídeo</a><button className="secondary" onClick={()=>copy(v)}>Copiar comentário</button><button onClick={()=>mark(v)}>✓ Já publiquei</button></div></> : <div className="actions"><span className="muted">Registrado em {v.date} · {v.usedComment}</span><button className="secondary" onClick={()=>setDb(d=>({...d,videos:d.videos.map(x=>x.id===v.id?{...x,done:false,date:null,usedComment:null}:x)}))}>Reabrir</button></div>}<button className="delete" onClick={()=>remove(v.id)}>Excluir vídeo</button></article>;
+  const row = v => <article className="video" key={v.id}><div className="videohead"><span className="tag">{v.tag ? "#"+v.tag : "Sem hashtag"}</span><span className={v.done?"status ok":"status"}>{v.done?"Confirmado":"Pendente"}</span></div><label className="video-tag-picker"><span className="muted">Hashtag:</span><select aria-label="Hashtag deste vídeo" value={v.tag || ""} onChange={e=>updateVideoTag(v.id,e.target.value)}><option value="">Sem hashtag</option>{db.tags.map(t=><option key={t} value={t}>#{t}</option>)}</select></label><a className="url" href={v.url} target="_blank" rel="noopener noreferrer">{v.url}</a>{!v.done ? <><select aria-label="Escolher comentário" value={chosen[v.id] ?? db.comments[0] ?? ""} onChange={e=>setChosen(s=>({...s,[v.id]:e.target.value}))}><option value="" disabled>Selecione um comentário</option>{db.comments.map(c=><option key={c} value={c}>{c}</option>)}</select><div className="actions"><button onClick={()=>prepare(v)}>↗ Abrir e copiar comentário</button><button className="secondary" onClick={()=>copy(v)}>Só copiar</button><button className="secondary" onClick={()=>mark(v)}>✓ Já publiquei</button></div></> : <div className="actions"><span className="muted">Registrado em {v.date} · {v.usedComment}</span><button className="secondary" onClick={()=>setDb(d=>({...d,videos:d.videos.map(x=>x.id===v.id?{...x,done:false,date:null,usedComment:null}:x)}))}>Reabrir</button></div>}<button className="delete" onClick={()=>remove(v.id)}>Excluir vídeo</button></article>;
   return <div className="layout"><aside><div className="brand"><span className="logo">TT</span><div>comenta<span className="pink">.ttk</span><small>COMMENT MANAGER</small></div></div><nav>{["Painel","Fila de vídeos","Hashtags","Comentários"].map(p=><button className={page===p?"active":""} key={p} onClick={()=>{setPage(p);notify("");}}>{({Painel:"▦","Fila de vídeos":"▤",Hashtags:"#",Comentários:"☏"})[p]} &nbsp; {p}</button>)}</nav><p className="asidefoot">Publicação manual · Dados neste navegador</p></aside><main><header><div><span className="eyebrow">SEU ESPAÇO DE TRABALHO</span><h1>{page}</h1></div><span className="muted">{new Date().toLocaleDateString("pt-BR")}</span></header>{message && <div className="notice" role="status">{message} <button className="secondary" onClick={()=>notify("")}>×</button></div>}
   {page==="Painel" && <><div className="stats"><div className="card stat"><span className="eyebrow">CONCLUÍDOS HOJE</span><strong>{count}<small> / 50</small></strong><div className="progress"><span style={{width:Math.min(100,count*2)+"%"}}/></div><p>{Math.min(100,count*2)}% da meta diária</p></div><div className="card stat"><span className="eyebrow">NA FILA</span><strong>{pending.length}</strong><p>Vídeos pendentes</p></div><div className="card stat"><span className="eyebrow">COMENTÁRIOS</span><strong>{db.comments.length}</strong><p>Mensagens cadastradas</p></div><div className="card stat"><span className="eyebrow">HASHTAGS</span><strong>{db.tags.length}</strong><p>Assuntos acompanhados</p></div></div><section className="card"><div className="sectiontitle"><div><h2>Próximos vídeos</h2><p>Abra o vídeo, revise e publique o comentário no TikTok.</p></div><button className="secondary" onClick={()=>setPage("Fila de vídeos")}>Ver fila</button></div>{pending.length ? pending.slice(0,3).map(row) : <div className="empty">Sua fila está vazia. Adicione vídeos para começar.</div>}</section></>}
   {page==="Fila de vídeos" && <><section className="card"><h2>Adicionar direto do TikTok</h2><p>Crie um favorito no navegador com o atalho abaixo. Ao visitar um vídeo individual do TikTok, clique no favorito para enviar o link para esta fila. O aplicativo deve estar rodando em http://localhost:5173.</p><div className="actions" style={{marginTop:16}}><button className="secondary" onClick={copyBookmarklet}>Copiar código do favorito</button></div><p style={{marginTop:12}}>No Chrome ou Opera: pressione Ctrl+D, edite o favorito e substitua o endereço (URL) pelo código copiado. Use o favorito na página de um vídeo.</p></section><section className="card"><h2>Adicionar vídeo</h2><p>Cole o link de um vídeo encontrado na pesquisa do TikTok.</p><form className="form" onSubmit={addVideo}><input type="url" placeholder="https://www.tiktok.com/@perfil/video/123..." value={url} onChange={e=>setUrl(e.target.value)} required/><select value={selectedTag} onChange={e=>setSelectedTag(e.target.value)}><option value="">Sem hashtag</option>{db.tags.map(t=><option key={t} value={t}>#{t}</option>)}</select><button>+ Adicionar</button></form><div className="bulk"><h3>Adicionar vários vídeos</h3><p>Cole vários links do TikTok, um por linha. A hashtag selecionada acima será aplicada aos novos vídeos.</p><form onSubmit={addBulk}><textarea rows="5" placeholder={"https://www.tiktok.com/@perfil/video/123...\\nhttps://www.tiktok.com/@perfil/video/456..."} value={bulkUrls} onChange={e=>setBulkUrls(e.target.value)}/><button>Importar links válidos</button></form></div></section><section className="card"><h2>Pendentes ({pending.length})</h2><div className="filters"><select aria-label="Filtrar por hashtag" value={filterTag} onChange={e=>setFilterTag(e.target.value)}><option value="">Todas as hashtags</option>{db.tags.map(t=><option key={t} value={t}>#{t}</option>)}</select><input aria-label="Filtrar por URL" placeholder="Buscar pelo link ou perfil..." value={filterText} onChange={e=>setFilterText(e.target.value)}/><label className="filter-check"><input type="checkbox" checked={onlyUntagged} onChange={e=>setOnlyUntagged(e.target.checked)}/> Sem hashtag</label></div>{filteredPending.length?filteredPending.map(row):<div className="empty">Nenhum vídeo corresponde aos filtros.</div>}</section><section className="card"><h2>Histórico ({done.length})</h2>{done.length?done.map(row):<div className="empty">Nenhuma publicação registrada.</div>}</section></>}
